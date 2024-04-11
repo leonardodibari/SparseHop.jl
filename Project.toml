@@ -3,6 +3,25 @@ uuid = "ce13f981-2fde-4e13-8fd5-7c8fd83dd66e"
 authors = ["Leonardo Di Bari"]
 version = "1.0.0-DEV"
 
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+DCAUtils = "e41cd558-3099-4f6e-a65d-5336857e40aa"
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
+PlmDCA = "06784e46-84fc-5582-b8de-0e984192b79e"
+PottsGauge = "3bb3bcb6-c561-57d3-939c-408d524c1e5b"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
+SimpleWeightedGraphs = "47aef6b3-ad0c-573a-a1e2-d07658019622"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+Tullio = "bc48ee85-29a4-5162-ae0b-a64e1601d4bc"
+
 [compat]
 julia = "1"
 
