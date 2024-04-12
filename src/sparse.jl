@@ -71,23 +71,30 @@ end
                 
                 
     
-function parallel_MCMC(chains, 
-        KK::Array{T,3},
-        V::Array{T,3},
-        Z_fam::Array{<:Integer,2}; 
-        structfile = "../DataAttentionDCA/data/PF00014/PF00014_struct.dat", N_iter::Int = 100, 
-        sweeps::Int = 5, learn_r = 0.05, each_step = 10, lambda = 0.001, n_edges = 30) where {T}
+function parallel_MCMC(V::Array{T,3}; 
+        msa_file = "../DataAttentionDCA/data/PF00014/PF00014_mgap6.fasta.gz", 
+        structfile = "../DataAttentionDCA/data/PF00014/PF00014_struct.dat", 
+        N_chains = 1000, N_iter::Int = 100, sweeps::Int = 5, learn_r = 0.05, 
+        each_step = 10, lambda = 0.001, n_edges = 30) where {T}
+    
+   
+    Z_fam = quickread(msa_file)[1]
+    rng = random_gens(N_chains)
+    chains = [Chain(Int8.(rand(1:21, size(Z_fam,1))),rng[n]) for n in 1:N_chains]
     
     L = chains[1].L
     H = size(V,3)
-    K = deepcopy(KK)
     TT = eltype(V)
     graf = [Graph(L) for head in 1:H]
-    N_chains = size(chains,1)
-    f1_emp, f2_emp, M = compute_weighted_frequencies(Z_fam, 22, 0.2)
-    Z = zeros(L, N_chains)
-    h = TT.(log.( pseudocount1(reshape(f1_emp, (21, L)), pc = 0.001)))
     
+    potts_par = 21*21*L*(L-1)/2 + L*21
+
+    f1_emp, f2_emp, M = compute_weighted_frequencies(Z_fam, 22, 0.2)
+    
+    K = TT.(zeros(L,L,H))
+    h = TT.(log.(pseudocount1(reshape(f1_emp, (21, L)), pc = 0.001)))
+    
+    Z = zeros(L, N_chains)
     for n in 1:N_chains
         Z[:,n] = chains[n].seq
     end
@@ -108,8 +115,7 @@ function parallel_MCMC(chains,
             f1, f2 = compute_freq(Int8.(Z))
             s = score(K,V)
             PPV = compute_PPV(s,structfile)
-            println("Iter $(iter) One $(round(cor(f1[:],f1_emp[:]), digits = 3)) Two $(round(cor(f2[:],f2_emp[:]), digits = 3)) PPV@L $(round(PPV[L], digits = 3)) PPV@2L $(round(PPV[2*L], digits = 3))")
-            println("Num of edges = $(sum([ne(graf[head]) for head in 1:H])) / $(L*(L-1)*H/2) ")     
+            println("Iter $(iter) One $(round(cor(f1[:],f1_emp[:]), digits = 3)) Two $(round(cor(f2[:],f2_emp[:]), digits = 3)) PPV@L $(round(PPV[L], digits = 3)) PPV@2L $(round(PPV[2*L], digits = 3)) #edges $(sum([ne(graf[head]) for head in 1:H])) / $(Int(L*(L-1)*H/2)) par_ratio = $(round((L*21+ 21*21 + sum([ne(graf[head]) for head in 1:H]))/potts_par, digits = 3)) ")     
         end       
     
         f1, f2 = compute_freq(Int8.(Z))
@@ -140,8 +146,12 @@ function parallel_MCMC(chains,
         edge_act!(z_score, graf, n_edges = n_edges)        
        
     end
+    
+    for n in 1:N_chains
+        Z[:,n] = chains[n].seq
+    end
 
-    return (K = K, h = h)
+    return (K = K, h = h, g = graf, Z = Z)
 end
 
 
