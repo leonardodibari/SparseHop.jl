@@ -1,3 +1,4 @@
+
 compute_freq(Z::Matrix) = compute_weighted_frequencies(Matrix{Int8}(Z), fill(1/size(Z,2), size(Z,2)), 22)
 
 function get_J(K::Array{T,3}, V::Array{T,3}) where {T}
@@ -5,14 +6,27 @@ function get_J(K::Array{T,3}, V::Array{T,3}) where {T}
     return J
 end
 
+function get_J!(J::Array{T,4}, K::Array{T,3}, V::Array{T,3}) where {T}
+    @tullio J[a, i, b, j] = K[i, j, h] * V[a, b, h] * (j != i)
+end
+
 function get_energy(seq::Array{<:Integer,1}, K::Array{T,3}, V::Array{T,3}, h::Array{T,2}) where{T}
     
     J = get_J(K, V)
-    @tullio en0[a, i] := J[a, i, seq[j], j];
+    @tullio en0[a, i] := J[a, i, seq[j], j] * (i != j)
     en = en0 .+ h
     @tullio res_en := en[seq[i], i]
     
-    return res_en
+    return -res_en
+end
+
+
+function conn_corr(f1::Array{T, 1}, f2::Array{T, 2}) where {T}
+    L = Int(size(f1,1) /21)
+    fone = reshape(f1, (21, L))
+    ftwo = reshape(f2, (21, L, 21, L))
+    @tullio f11[i,a,j,b] := fone[a,i] * fone[b,j]
+    return cor(Float32.(f11[:]), Float32.(ftwo[:]))
 end
 
 function softmax_notinplace(x::AbstractArray; dims = 1)
@@ -25,21 +39,6 @@ function softmax_notinplace(x::AbstractArray; dims = 1)
     return out ./ sum(out; dims)
 end
 
-
-
-function edge_act!(z_score::Array{Float64, 3}, graf; n_edges = 30)
-    
-    for i in 1:n_edges
-        m, n, nu = Tuple(argmax(z_score))
-        z_score[m, n, nu] = 0
-        z_score[n, m, nu] = 0
-        add_edge!(graf[nu], m, n)
-    end
-end
-        
-    
-    
-
 function get_energy(Z::Array{<:Integer,2}, K::Array{T,3}, V::Array{T,3}, h::Array{T,2}) where{T}
     return [get_energy(msa[i,:], K, V, h)  for i in 1:size(Z,2)]
 end
@@ -50,11 +49,13 @@ function logsumexp(a::AbstractArray{<:Real}; dims=1)
 end
 
 function pseudocount1(f1; pc = 0.1, q = 21)
-    return ((1-pc) .* f1 ) .+ (pc / q)
+    T = eltype(f1)
+    return T.(((1-pc) .* f1 ) .+ (pc / q))
 end
 
 function pseudocount2(f2; pc = 0.1, q = 21)
-    return ((1-pc) .* f2 ) .+ (pc / q^2)
+    T = eltype(f2)
+    return T.(((1-pc) .* f2 ) .+ (pc / q^2))
 end
 
 function Delta_energy(J::Array{T,4}, h::Array{T, 2},

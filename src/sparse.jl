@@ -1,157 +1,248 @@
-function prob_cond(site, 
-        seq::Array{<:Integer,1}, 
-        h::Array{T,2}, 
-        J::Array{T,4}, 
-        L::Int,
-        graf;
-        q = 21, t = 1)  where {T}
-
-	prob = zeros(q)
-    log_prob = zeros(q)
-    ne = neighbors(graf, site)
-    
-	for a in 1:q
-		log_prob[a] += h[a, site]
- 		for j in ne
-			log_prob[a] += J[seq[j], j, a, site]
-        end
-	end
- 
-	return softmax_notinplace(log_prob)
-end
 
 
-function gibbs_sampling!(seq::Array{<:Integer,1}, 
-        h::Array{T,2}, 
-        J::Array{T,4}, 
-        L::Int, 
-        graf,
-        g;
-        q = 21, sweeps = 5) where {T}
-    
-    for n in 1:sweeps
-        for i in 1:L
-            seq[i] = sample(g, 1:q, weights(prob_cond(i, seq, h, J, L, graf)))
-        end
-    end
-    return seq
-end
-
-function single_diff_moh(f::Array{Float64, 4}, f_emp::Array{Float64, 4}, 
-        V::Array{T,3}, i::Int, j::Int, head::Int) where {T}
-    
-    @tullio media := f[a, i, b, j] * V[a, b, head]
-    @tullio media_emp := f_emp[a, i, b, j] * V[a, b, head]
-    return media_emp .- media
-end
-
-function diff_moh(f::Array{Float64, 4}, f_emp::Array{Float64, 4}, V::Array{T,3}) where {T}
-    return moh(f_emp, V) .- moh(f, V)
-end
-
-function moh(f::Array{Float64, 4}, V::Array{T,3}) where {T}
-    @tullio media[i, j, h] := f[a, i, b, j] * V[a, b, h]
+function single_moh(f::Array{T, 4}, V::Array{T,3}, i::Int, j::Int, head::Int) where {T}
+    @tullio media := f[a, i, b, j] * V[a, b, head] * (i != j)
     return media
 end
 
-function voh(f::Array{Float64, 4}, V::Array{T,3}) where {T}
-    @tullio square[i, j, h] := f[a, i, b, j] * V[a, b, h] * V[a, b, h] 
-    return square .- (moh(f, V) .* 2)
+function moh!(dest::Array{T,3}, f::Array{T, 4}, V::Array{T,3}) where {T}
+    @tullio dest[i, j, h] = f[a, i, b, j] * V[a, b, h] * (i != j)
 end
 
-function compute_z_score(f::Array{Float64, 4}, f_emp::Array{Float64, 4}, V::Array{T,3}) where {T}
-    return diff_moh(f, f_emp, V) ./ voh(f, V)
+function soh!(dest::Array{T,3}, f::Array{T, 4}, V::Array{T,3}) where {T}
+    @tullio dest[i, j, h] = f[a, i, b, j] * V[a, b, h] * V[a, b, h] 
 end
 
 
-function find_optimal_K(f2::Array{Float64, 4}, f2_emp::Array{Float64, 4}, V::Array{T,3}, 
-        m::Int, n::Int, nu::Int) where {T}
-    println("ciao")
+function small_k_single_edge(f::Array{T, 4}, f_emp::Array{T, 4}, 
+        V::Array{T,3}, i::Int, j::Int, head::Int) where {T}
+    @tullio media := f[a, i, b, j] * V[a, b, head] * (i != j)
+    @tullio media_emp := f_emp[a, i, b, j] * V[a, b, head] * (i != j)
+    @tullio square := f[a, i, b, j] * V[a, b, head] * V[a, b, head]  * (i != j)  
+    return (media_emp - media) / (square - media^2)
 end
-                
-                
+
+function small_k_all_edges(f::Array{T, 4}, f_emp::Array{T, 4}, 
+        V::Array{T,3}) where {T}
+    @tullio media[i, j, head] := f[a, i, b, j] * V[a, b, head] * (i != j)
+    @tullio media_emp[i, j, head] := f_emp[a, i, b, j] * V[a, b, head] * (i != j)
+    @tullio square[i, j, head] := f[a, i, b, j] * V[a, b, head] * V[a, b, head] * (i != j)  
+    return (media_emp .-  media) ./ (square .- (media.^2))
+end
+
+function compute_z_score!(dest::Array{T,3}, f::Array{T, 4}, f_emp::Array{T, 4}, 
+        V::Array{T,3}) where {T}
+    @tullio media[i, j, head] := f[a, i, b, j] * V[a, b, head] * (i != j)
+    @tullio media_emp[i, j, head] := f_emp[a, i, b, j] * V[a, b, head] * (i != j)
+    @tullio square[i, j, head] := f[a, i, b, j] * V[a, b, head] * V[a, b, head]  * (i != j)  
+    dest = ((media_emp .-  media).^2) ./ (square .- (media.^2))
+end
+
+
+function compute_z_score(f::Array{T, 4}, f_emp::Array{T, 4}, 
+        V::Array{T,3}) where {T}
+    @tullio media[i, j, head] := f[a, i, b, j] * V[a, b, head] * (i != j)
+    @tullio media_emp[i, j, head] := f_emp[a, i, b, j] * V[a, b, head] * (i != j)
+    @tullio square[i, j, head] := f[a, i, b, j] * V[a, b, head] * V[a, b, head]  * (i != j)  
+    return ((media_emp .-  media).^2) ./ (square .- (media.^2))
+end
+
+
+function compute_z_score(mheads::Array{T,3}, sqheads::Array{T,3}, D) where {T}
+    num = (D.mheads .- mheads) .^2
+    den = sqheads .- (mheads .^2)
+    arr = num ./ den
+    a = argmax(arr)[1]
+    b = argmax(arr)[2]
+    c = argmax(arr)[3]
+    #println((a ,b,c, arr[a,b,c], num[a,b,c], den[a,b,c]))
+    return ((D.mheads .- mheads) .^2) ./ (sqheads .- (mheads .^2))
+end
+
+
+function edge_act!(z_score::Array{T, 3}, K::Array{T,3}, V::Array{T,3}, f2rs::Array{T,4},
+        df2rs::Array{T,4}, graf, full_graf; n_edges = 30) where {T}
+    z = deepcopy(z_score)
+    for i in 1:n_edges
+        m, n, nu = Tuple(argmax(z))
+        add_edge!(graf[nu], m, n)
+        add_edge!(full_graf, m, n)
+        K[m, n, nu] = small_k_single_edge(pseudocount2(f2rs, pc = 0.1), pseudocount2(df2rs, pc = 0.1), V, m, n, nu)
+        K[n, m, nu] = K[m, n, nu]
+        z[m, n, nu] = 0
+        z[n, m, nu] = 0
+    end
+end
+
+
+function prob_cond!(chain, 
+        site::Int, 
+        h::Array{T,2}, 
+        J::Array{T,4}, 
+        L::Int,
+        full_graf;
+        q = 21)  where {T}
+
+    #log_prob = zeros(q)
+	for a in 1:q
+        chain.log_prob[a] = 0
+		chain.log_prob[a] += h[a, site]
+ 		for j in neighbors(full_graf, site)
+			chain.log_prob[a] += J[chain.seq[j], j, a, site]
+        end
+	end
     
+    chain.prob .= softmax(chain.log_prob)
+end
+
+
+function gibbs_sampling!(chain, 
+        h::Array{T,2}, 
+        J::Array{T,4}, 
+        L::Int, 
+        graf;
+        q = 21, sweeps = 5) where {T}
+    
+    for _ in 1:sweeps
+        for site in randperm(L)
+            prob_cond!(chain, site, h, J, L, graf)
+            chain.seq[site] = sample(chain.generator, 1:q, weights(chain.prob))
+        end
+    end
+end
+
+
+        
+                
+ #look regularization    
 function parallel_MCMC(V::Array{T,3}; 
         msa_file = "../DataAttentionDCA/data/PF00014/PF00014_mgap6.fasta.gz", 
         structfile = "../DataAttentionDCA/data/PF00014/PF00014_struct.dat", 
         N_chains = 1000, N_iter::Int = 100, sweeps::Int = 5, learn_r = 0.05, 
-        each_step = 10, lambda = 0.001, n_edges = 30) where {T}
+        each_step = 10, lambda = 0.001, n_edges = 30, reg = 0.01) where {T}
     
-   
-    Z_fam = quickread(msa_file)[1]
-    rng = random_gens(N_chains)
-    chains = [Chain(Int8.(rand(1:21, size(Z_fam,1))),rng[n]) for n in 1:N_chains]
-    
-    L = chains[1].L
-    H = size(V,3)
     TT = eltype(V)
+    H = size(V,3)
+    D = Data(msa_file, V, T = TT)
+    L = size(D.msa,1)
+    
+    dL_a = zeros(L,L,H)
+    k_a = zeros(L,L,H)
+    
+    rng = random_gens(N_chains)
+    chains = [Chain(Int8.(rand(1:21, L)), rng[n]) for n in 1:N_chains] #initialize random
+    #chains = [Chain(D.msa[:,n], rng[n]) for n in 1:N_chains]   #initialize in the msa
     graf = [Graph(L) for head in 1:H]
+    full_graf = Graph(L)
+
     
     potts_par = 21*21*L*(L-1)/2 + L*21
 
-    f1_emp, f2_emp, M = compute_weighted_frequencies(Z_fam, 22, 0.2)
-    
     K = TT.(zeros(L,L,H))
-    h = TT.(log.(pseudocount1(reshape(f1_emp, (21, L)), pc = 0.001)))
+    h = TT.(log.(pseudocount1(D.f1rs, pc = 0.0001)))
     
-    Z = zeros(L, N_chains)
-    for n in 1:N_chains
-        Z[:,n] = chains[n].seq
+    
+    
+    msa = Int8.(zeros(L, N_chains))
+    @tasks for n in 1:N_chains
+        for i in 1:L
+            msa[i,n] = chains[n].seq[i]
+        end
     end
-    f1, f2 = compute_freq(Int8.(Z))
-    println("START: One $(round(cor(f1[:],f1_emp[:]), digits = 3)) Two $(round(cor(f2[:],f2_emp[:]), digits = 3))")
+      
+    f1, f2 = compute_freq(Int8.(msa))
+    f1 = TT.(f1)
+    f2 = TT.(f2)
+    f1rs = reshape(f1, (21, L))
+    f2rs = reshape(f2, (21, L, 21, L))
+    #mheads = TT.(zeros(L,L,size(V,3)))
+    #moh!(mheads, pseudocount2(f2rs, pc = 0.1), V)
+    #sqheads = TT.(zeros(L,L,size(V,3)))
+    #soh!(sqheads, pseudocount2(f2rs, pc = 0.1), V)
     
+    
+    J = TT.(rand(21, L, 21, L))
     
     for iter in 1:N_iter
-        J = get_J(K, V)
-        @tasks for n in 1:N_chains
-            Z[:,n] = gibbs_sampling!(chains[n].seq, h, J, L, graf[1], chains[n].generator, sweeps = sweeps)
-        end
-
+        
+        #from time to time print info on learning
         if iter % each_step == 0
-            for n in 1:N_chains
-                Z[:,n] = chains[n].seq
-            end
-            f1, f2 = compute_freq(Int8.(Z))
             s = score(K,V)
             PPV = compute_PPV(s,structfile)
-            println("Iter $(iter) One $(round(cor(f1[:],f1_emp[:]), digits = 3)) Two $(round(cor(f2[:],f2_emp[:]), digits = 3)) PPV@L $(round(PPV[L], digits = 3)) PPV@2L $(round(PPV[2*L], digits = 3)) #edges $(sum([ne(graf[head]) for head in 1:H])) / $(Int(L*(L-1)*H/2)) par_ratio = $(round((L*21+ 21*21 + sum([ne(graf[head]) for head in 1:H]))/potts_par, digits = 3)) ")     
+            println("Iter $(iter) One $(round(cor(f1[:],D.f1[:]), digits = 3)) Conn $(round(cor(triu(f2 - f1*f1', 21)[:], triu(D.f2 - D.f1*D.f1', 21)[:]), digits = 3)) PPV@L $(round(PPV[L], digits = 3)) PPV@2L $(round(PPV[2*L], digits = 3)) #edges $(sum([ne(graf[head]) for head in 1:H])) / $(Int(L*(L-1)*H/2)) par_ratio = $(round((L*21+ 21*21 + sum([ne(graf[head]) for head in 1:H]))/potts_par, digits = 3)) ")     
         end       
-    
-        f1, f2 = compute_freq(Int8.(Z))
-        f1_diff = reshape(f1_emp .- f1, (21, L))
-        f2_emp = reshape(f2_emp, (21, L, 21, L))
-        f2 = reshape(f2, (21, L, 21, L))
+        
+         
+        @tasks for i in 1:L 
+            for j in i+1:L 
+                for h in 1:H 
+                   k_a[i,j,h], dL_a[i,j,h] = dlog_small_k(pseudocount2(D.f2rs[:,i,:,j], pc = 0.1), 
+                        pseudocount2(f2rs[:,i,:,j], pc = 0.1), V[:,:,h], reg = reg); 
+                end 
+            end 
+        end
+        
+        for _ in 1:n_edges
+            m, n, nu = Tuple(argmax(dL_a))
+            #K[m,n,nu] = SparseHop.bisection(pseudocount2(D.f2rs[:,m,:,n], pc = 0.1), 
+             #   pseudocount2(f2rs[:,m,:,n], pc = 0.1), V[:,:,nu], reg = reg)[1]; 
+            #K[n,m,nu] = K[m,n,nu]
+        
+        
+            add_edge!(graf[nu], m, n)
+            add_edge!(full_graf, m, n)
+        
+            print("Iteration : $(iter) ")
+            println((m, n, nu))
+            println((K[m,n,nu], dL_a[m,n,nu]))
+            dL_a[m,n,nu] = 0
+        end
+        
+        
+        
+        get_J!(J, K, V)
+        for n in 1:N_chains
+            gibbs_sampling!(chains[n], h, J, L, full_graf, sweeps = sweeps)
+            for i in 1:L
+                msa[i,n] = chains[n].seq[i]
+            end
+        end
+        
+        
+        #println(mean([get_energy(Smsa[:,n], K, V, h) for n in 1:N_chains]))
+        #update the model sample frequencies 
+        f1, f2 = compute_freq(Int8.(msa))
+        f1 = TT.(f1)
+        f2 = TT.(f2)
+        f1rs = reshape(f1, (21, L))
+        f2rs = reshape(f2, (21, L, 21, L))
+        #moh!(mheads, pseudocount2(f2rs, pc = 0.1), V)
+        #soh!(sqheads, pseudocount2(f2rs, pc = 0.1), V)
+        #update_sample!(msa, f1, f2, f1rs, f2rs,  V, mheads, sqheads,chains, L, N_chains)
+        
+        
         
         #gradient descent on fields
-        h .+= (learn_r .* f1_diff) .+  2 .* lambda .* h
-        
+        h .+= learn_r .* (D.f1rs .- f1rs) 
         #gradient descent on couplings only for selected graf
         for head in 1:H
             if ne(graf[head]) !== 0
                 for i in findall(.!isempty.(graf[head].fadjlist))
                     for j in neighbors(graf[head], i)
-                        #print("Iteration : $(iter) ")
-                        #println((i, j, head))
-                        K[i,j,head] += learn_r * single_diff_moh(f2, f2_emp, V, i, j, head) 
-                                        + 2 * lambda * K[i, j, head]
-                        #println(K[i,j,head])
+                        
+                        K[i, j, head] += learn_r * (single_moh(D.f2rs, V, i, j, head) 
+                            .- single_moh(f2rs, V, i, j, head))
+                        
                     end
                 end
             end
         end
-                     
-        #edge activation/update
-        z_score = compute_z_score(pseudocount2(f2), pseudocount2(f2_emp), V)
-        edge_act!(z_score, graf, n_edges = n_edges)        
-       
+         
+        
     end
     
-    for n in 1:N_chains
-        Z[:,n] = chains[n].seq
-    end
-
-    return (K = K, h = h, g = graf, Z = Z)
+    return (K = K, h = h, g = graf, Z = msa, Zf = D.msa, C = chains, #dL = z_score, 
+        f1 = f1rs, Df1 = D.f1rs, f2 = f2rs, Df2 = D.f2rs)
 end
 
 
