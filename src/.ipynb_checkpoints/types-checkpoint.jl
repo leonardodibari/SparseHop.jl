@@ -20,6 +20,7 @@ struct Data{T, T2}
     f2::Array{T,2}
     f1rs::Array{T,2}
     f2rs::Array{T,4}
+    f2rspc::Array{T,4}
     V::Array{T,3}
     mheads::Array{T,3}
 end
@@ -32,9 +33,10 @@ function Data(filepath, V; T::DataType=Float32, T2::DataType = Int8)
     f2 = T.(f2)
     f1rs = reshape(f1, (21, L))
     f2rs = reshape(f2, (21, L, 21, L))
+    f2rspc = pseudocount2(f2rs, pc = 0.1)
     mheads = T.(zeros(L,L,size(V,3)))
-    moh!(mheads, pseudocount2(f2rs, pc = 0.1), V)
-    Data{T, T2}(msa, f1, f2, f1rs, f2rs, V, mheads)
+    moh!(mheads, f2rspc, V)
+    Data{T, T2}(msa, f1, f2, f1rs, f2rs, f2rspc, V, mheads)
 end
 
 struct ModelSample{T}
@@ -72,25 +74,20 @@ function update_sample!(msa::Array{<:Integer,2},
     f2::Array{T,2},
     f1rs::Array{T,2},
     f2rs::Array{T,4},
+    f2rspc::Array{T,4},
     V::Array{T,3},
-    mheads::Array{T,3},
-    sqheads::Array{T,3},
-    chains, 
-    L::Int, 
-    N_chains::Int) where {T}
+    mheads::Array{T,3}, 
+    L::Int,
+    TT) where {T}
     
-    for n in 1:N_chains
-        msa[:,n] = Int8.(chains[n].seq)
-    end
-    
-    TT = eltype(f1)
     f1, f2 = compute_freq(Int8.(msa))
-    f1 = TT.(f1)
-    f2 = TT.(f2)
-    f1rs = reshape(f1, (21, L))
-    f2rs = reshape(f2, (21, L, 21, L))
-    moh!(mheads, pseudocount2(f2rs, pc = 0.1), V)
-    soh!(sqheads, pseudocount2(f2rs, pc = 0.1), V)
+    f1 .= TT.(f1)
+    f2 .= TT.(f2)
+    f1rs .= reshape(f1, (21, L))
+    f2rs .= reshape(f2, (21, L, 21, L))
+    f2rspc .= TT.(pseudocount2(f2rs, pc = 0.1))
+    moh!(mheads, f2rspc, V)
+    
 end
     
 
