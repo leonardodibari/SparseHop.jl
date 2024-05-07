@@ -1,5 +1,58 @@
+function loc_sample(rng::AbstractRNG, wv)
+    1 == firstindex(wv) ||
+        throw(ArgumentError("non 1-based arrays are not supported"))
+    t = rand(rng) * sum(wv)
+    n = length(wv)
+    i = 1
+    cw = wv[1]
+    while cw < t && i < n
+        i += 1
+        @inbounds cw += wv[i]
+    end
+    return i
+end
+loc_sample(wv) = loc_sample(default_rng(), wv)
+
+loc_sample(rng::AbstractRNG, a::AbstractArray, wv) = a[loc_sample(rng, wv)]
+loc_sample(a::AbstractArray, wv) = loc_sample(default_rng(), a, wv)
+
+function loc_sample!(rng::AbstractRNG, a::AbstractArray, wv, dest::Array{Int8, 1}, site::Int)
+    1 == firstindex(wv) ||
+        throw(ArgumentError("non 1-based arrays are not supported"))
+    t = rand(rng) * sum(wv)
+    n = length(wv)
+    i = 1
+    cw = wv[1]
+    while cw < t && i < n
+        i += 1
+        @inbounds cw += wv[i]
+    end
+    dest[site] = i
+end
+
+
+function loc_softmax!(out::AbstractArray{T}, x::AbstractArray, max_) where {T}
+    max_ = maximum(x)
+    if all(isfinite, max_)
+        @fastmath out .= exp.(x .- max_)
+    else
+        _zero, _one, _inf = T(0), T(1), T(Inf)
+        @fastmath @. out = ifelse(isequal(max_,_inf), ifelse(isequal(x,_inf), _one, _zero), exp(x - max_))
+    end
+    #tmp = dims isa Colon ? sum(out) : sum!(max_, out)
+    out ./= sum(out)#tmp
+end
+
+loc_softmax!(x::AbstractArray, max_) = loc_softmax!(x, x, max_)
+
 
 compute_freq(Z::Matrix) = compute_weighted_frequencies(Matrix{Int8}(Z), fill(1/size(Z,2), size(Z,2)), 22)
+
+function compute_freq!(f1, f2, Z::Matrix)
+    f1 .= compute_weighted_frequencies(Matrix{Int8}(Z), fill(1/size(Z,2), size(Z,2)), 22)[1]
+    f2 .= compute_weighted_frequencies(Matrix{Int8}(Z), fill(1/size(Z,2), size(Z,2)), 22)[2]
+end
+    
 
 function get_J(K::Array{T,3}, V::Array{T,3}) where {T}
     @tullio J[a, i, b, j] := K[i, j, h] * V[a, b, h] * (j != i)
@@ -29,33 +82,26 @@ function conn_corr(f1::Array{T, 1}, f2::Array{T, 2}) where {T}
     return cor(Float32.(f11[:]), Float32.(ftwo[:]))
 end
 
-function softmax_notinplace(x::AbstractArray; dims = 1)
-    max_ = maximum(x; dims)
-    if all(isfinite, max_)
-        @fastmath out = exp.(x .- max_)
-    else
-        @fastmath @. out = ifelse(isequal(max_,Inf), ifelse(isequal(x,Inf), 1, 0), exp(x - max_))
-    end
-    return out ./ sum(out; dims)
-end
 
 function get_energy(Z::Array{<:Integer,2}, K::Array{T,3}, V::Array{T,3}, h::Array{T,2}) where{T}
     return [get_energy(msa[i,:], K, V, h)  for i in 1:size(Z,2)]
 end
 
-function logsumexp(a::AbstractArray{<:Real}; dims=1)
-    m = maximum(a; dims=dims)
-    return m + log.(sum(exp.(a .- m); dims=dims))
-end
 
-function pseudocount1(f1; pc = 0.1, q = 21)
-    T = eltype(f1)
+function pseudocount1(f1, T::DataType, pc::AbstractFloat, q::Int)
     return T.(((1-pc) .* f1 ) .+ (pc / q))
 end
 
-function pseudocount2(f2; pc = 0.1, q = 21)
-    T = eltype(f2)
+function pseudocount1!(dest, f1, T::DataType, pc::AbstractFloat, q::Int)
+     dest .= T.(((1-pc) .* f1 ) .+ (pc / q))
+end
+
+function pseudocount2(f2, T::DataType, pc::AbstractFloat, q::Int)
     return T.(((1-pc) .* f2 ) .+ (pc / q^2))
+end
+
+function pseudocount2!(dest, f2, T::DataType, pc::AbstractFloat, q::Int)
+    dest .= T.(((1-pc) .* f2 ) .+ (pc / q^2))
 end
 
 function Delta_energy(J::Array{T,4}, h::Array{T, 2},

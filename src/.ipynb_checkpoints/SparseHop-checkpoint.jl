@@ -15,11 +15,12 @@ import DCAUtils: read_fasta_alignment, remove_duplicate_sequences, compute_weigh
 import Printf:@printf
 import Statistics: mean, cor
 import StatsBase: sample, weights
-import Flux: softmax, Adam
+import Flux: softmax!, Adam
 import Flux.Optimise: update! 
 import Flux.Optimiser
 
 include("sparse.jl")
+include("sampling.jl")
 include("non_sparse.jl")
 include("types.jl")
 include("utils.jl")
@@ -27,8 +28,8 @@ include("dca_score.jl")
 include("num_sol.jl")
 
 
-export Chain, parallel_MCMC, parallel_MCMC_ns, folders, seq_paths_dict, structs_dict, quickread, random_gens, compute_freq
-export run_eq
+export Chain, parallel_MCMC, parallel_MCMC_ns, folders, seq_paths_dict, structs_dict, quickread, random_gens, compute_freq, compute_freq!, get_J, get_J!, gibbs_sampling!
+export dlog!, bisection!, zero_eq!, zero_eq2!, NumSolVar
 
 
 end
