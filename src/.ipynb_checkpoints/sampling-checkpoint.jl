@@ -5,34 +5,25 @@ function prob_cond!(chain,
         L::Int,
         full_graf) where {T}
 
-	for a in chain.aminos
+	for a in 1:21
         chain.log_prob[a] = 0
 		chain.log_prob[a] += h[a, site]
  		for j in neighbors(full_graf, site)
 			chain.log_prob[a] += J[chain.seq[j], j, a, site]
         end
 	end
-    
-    loc_softmax!(chain.log_prob, chain.max_)
+    loc_softmax!(chain.log_prob)
 end
 
 
-function gibbs_sampling!(chain, 
-        h::Array{T,2}, 
-        J::Array{T,4}, 
-        L::Int, 
-        graf,
-        sweeps::Int) where {T}
-    
-    
-    for _ in 1:sweeps
+function gibbs_sampling!(chain, h::Array{T,2}, J::Array{T,4}, L::Int, graf, sweeps::Int) where {T}
+    for s in 1:sweeps
         for site in shuffle!(chain.sites)
             prob_cond!(chain, site, h, J, L, graf)
-            loc_sample!(chain.generator, chain.aminos, chain.log_prob, chain.seq, site)
+            loc_sample!(chain.generator, chain.log_prob, chain.seq, site)
         end
     end
 end
-
 
 
 function fully_connected_graph(n)
@@ -66,6 +57,34 @@ function moh!(dest::Array{T,3}, f::Array{T, 4}, V::Array{T,3}, L::Int, H::Int, q
     end
 end
 
+
+
+function update_sample!(msa::Array{<:Integer,2},
+    f1::Array{T,1},
+    f2::Array{T,2},
+    f1rs::Array{T,2},
+    f2rs::Array{T,4},
+    f2rspc::Array{T,4},
+    V::Array{T,3},
+    mheads::Array{T,3},
+    mheadspc::Array{T,3},
+    L::Int,
+    pc::T,
+    q::Int,
+    H::Int,
+    TT::DataType) where {T}
+    
+    f1, f2 = compute_freq(Int8.(msa))
+    f1 .= TT.(f1)
+    f2 .= TT.(f2)
+    f1rs .= reshape(f1, (q, L))
+    f2rs .= reshape(f2, (q, L, q, L))
+    pseudocount2!(f2rspc, f2rs, TT, pc, q)
+    moh!(mheads, f2rs, V, L, H, q)
+    moh!(mheadspc, f2rspc, V, L, H, q)
+    
+end
+    
 
 
 function get_loss_J(J::Array{T,4},

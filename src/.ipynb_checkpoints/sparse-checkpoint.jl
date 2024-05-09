@@ -3,7 +3,7 @@ function parallel_MCMC(V::Array{T,3};
         msa_file = "../DataAttentionDCA/data/PF00014/PF00014_mgap6.fasta.gz", 
         structfile = "../DataAttentionDCA/data/PF00014/PF00014_struct.dat", 
         N_chains = 1000, N_iter::Int = 100, grad_iter::Int = 1, sweeps::Int = 5, learn_r = 0.05, 
-        each_step = 10, q = 21, pc = 0.1, lambda = 0.001, n_edges = 30, reg = 0.01, avoid_upd = false, verbose = false, opt_k = true, grad_upd = true) where {T}
+        each_step = 10, q = 21, pc = 0.1, n_edges = 30, reg = 0.01, avoid_upd = false, verbose = false, opt_k = true, grad_upd = true) where {T}
     
     TT = eltype(V)
     H = size(V,3)
@@ -11,13 +11,9 @@ function parallel_MCMC(V::Array{T,3};
     D = Data(msa_file, V, pc, q, H, T = TT)
     W = compute_weights(D.msa, 0.2)[1]
     _w = TT.(W ./ sum(W))
-    max_ = TT.(zeros(N_chains))
-    m = 0; n = 0; nu = 0;
+    
     L = size(D.msa,1)
      
-    sites = [i for i in 1:L]
-    aminos = [i for i in 1:q]
-    
     dL = zeros(L,L,H)
     k = zeros(L,L,H)
     y_k = zeros(L,L,H)
@@ -27,7 +23,7 @@ function parallel_MCMC(V::Array{T,3};
     #chains = [Chain(D.msa[:,n], rng[n]) for n in 1:N_chains]   #initialize in the msa
     graf = [Graph(L) for head in 1:H]
     full_graf = Graph(L)
-    str = NumSolVar(TT)
+    str = [NumSolVar(TT) for head in 1:H]
     
     potts_par = q*q*L*(L-1)/2 + L*q
 
@@ -82,9 +78,11 @@ function parallel_MCMC(V::Array{T,3};
         #edge activation
         if n_edges !== 0
             for i in 1:L 
-                for j in i+1:L 
-                    for head in 1:H
-                        bisection!(k, y_k, dL, str, D.mheadspc[i,j,head], f2rspc, V, i, j, head, reg, q)
+                for j in 1:L 
+                    if j != i 
+                        @tasks for head in 1:H
+                            bisection!(k, y_k, dL, str[head], D.mheadspc[i,j,head], f2rspc, V, i, j, head, reg, q)
+                        end
                     end 
                 end 
             end
@@ -97,7 +95,9 @@ function parallel_MCMC(V::Array{T,3};
             
             for _ in 1:n_edges
                 m, n, nu = Tuple(argmax(dL))
-                println("Suggested K : $(k[m,n,nu]), terms $(argmax(dL)), dL : $(maximum(dL))")
+                if verbose == true
+                    println("Suggested K : $(k[m,n,nu]), terms $(argmax(dL)), dL : $(maximum(dL))")
+                end
                 if opt_k == true
                     K[m,n,nu] = k[m,n,nu] 
                     K[n,m,nu] = K[m,n,nu]
@@ -107,16 +107,13 @@ function parallel_MCMC(V::Array{T,3};
                 end
                 add_edge!(graf[nu], m, n)
                 add_edge!(full_graf, m, n)
-                if verbose == true
-                    print("Iteration : $(iter) ")
-                    println((m, n, nu))
-                    println((K[m,n,nu], dL[m,n,nu]))
-                end
                 dL[m,n,nu] = 0
             end
         end
         fine = time()
-        println("Edge activation took $(fine-start) s")
+        if verbose == true
+            println("Edge activation took $(fine-start) s")
+        end
          
         startg = time()
         #gibbs sampling and gradient update
@@ -154,7 +151,9 @@ function parallel_MCMC(V::Array{T,3};
             end   
         end
         fineg = time()
-        println("Sampling+grad update took $(fineg-startg) s")
+        if verbose == true
+            println("Sampling+grad update took $(fineg-startg) s")
+        end
         
     end
     

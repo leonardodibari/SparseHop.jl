@@ -1,20 +1,17 @@
-struct Chain{T}
-    seq::Array{<:Integer,1}
-    aminos::Array{<:Integer,1}
-    sites::Array{<:Integer,1}
-    L::Int
+struct Chain{T,Ti}
+    seq::Array{Ti,1}
     log_prob::Array{T,1}
-    max_::T
-    generator
+    sites::Array{Int,1}
+    L::Int
+    generator::Xoshiro
 end
 
-function Chain(seq::Array{<:Integer,1}, q::Int, generator; T::DataType=Float32)
+function Chain(seq::Array{<:Integer,1}, q::Int, generator::Xoshiro; T::DataType=Float32, Ti::DataType=Int8)
     L = size(seq,1)
     log_prob = T.(zeros(q))
-    aminos = [i for i in 1:q]
     sites = [i for i in 1:L]
-    max_ = T(0)
-    Chain{T}(seq, aminos, sites, L, log_prob, max_, generator)
+    seq = Ti.(seq)
+    Chain{T,Ti}(seq, log_prob, sites, L, generator)
 end
 
 
@@ -61,34 +58,6 @@ function NumSolVar(T::DataType=Float32)
 end
 
 
-function update_sample!(msa::Array{<:Integer,2},
-    f1::Array{T,1},
-    f2::Array{T,2},
-    f1rs::Array{T,2},
-    f2rs::Array{T,4},
-    f2rspc::Array{T,4},
-    V::Array{T,3},
-    mheads::Array{T,3},
-    mheadspc::Array{T,3},
-    L::Int,
-    pc::T,
-    q::Int,
-    H::Int,
-    TT) where {T}
-    
-    f1, f2 = compute_freq(Int8.(msa))
-    f1 .= TT.(f1)
-    f2 .= TT.(f2)
-    f1rs .= reshape(f1, (q, L))
-    f2rs .= reshape(f2, (q, L, q, L))
-    pseudocount2!(f2rspc, f2rs, TT, pc, q)
-    moh!(mheads, f2rs, V, L, H, q)
-    moh!(mheadspc, f2rspc, V, L, H, q)
-    
-end
-    
-
-    
     
     
 

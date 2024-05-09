@@ -1,20 +1,17 @@
-struct Chain{T}
-    seq::Array{<:Integer,1}
-    aminos::Array{<:Integer,1}
-    sites::Array{<:Integer,1}
-    L::Int
+struct Chain{T,Ti}
+    seq::Array{Ti,1}
     log_prob::Array{T,1}
-    max_::T
-    generator
+    sites::Array{Int,1}
+    L::Int
+    generator::Xoshiro
 end
 
-function Chain(seq::Array{<:Integer,1}, q::Int, generator; T::DataType=Float32)
+function Chain(seq::Array{<:Integer,1}, q::Int, generator::Xoshiro; T::DataType=Float32, Ti::DataType=Int8)
     L = size(seq,1)
     log_prob = T.(zeros(q))
-    aminos = [i for i in 1:q]
     sites = [i for i in 1:L]
-    max_ = T(0)
-    Chain{T}(seq, aminos, sites, L, log_prob, max_, generator)
+    seq = Ti.(seq)
+    Chain{T,Ti}(seq, log_prob, sites, L, generator)
 end
 
 
@@ -74,7 +71,7 @@ function update_sample!(msa::Array{<:Integer,2},
     pc::T,
     q::Int,
     H::Int,
-    TT) where {T}
+    TT::DataType) where {T}
     
     f1, f2 = compute_freq(Int8.(msa))
     f1 .= TT.(f1)

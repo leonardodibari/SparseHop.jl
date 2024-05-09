@@ -16,12 +16,10 @@ loc_sample(wv) = loc_sample(default_rng(), wv)
 loc_sample(rng::AbstractRNG, a::AbstractArray, wv) = a[loc_sample(rng, wv)]
 loc_sample(a::AbstractArray, wv) = loc_sample(default_rng(), a, wv)
 
-function loc_sample!(rng::AbstractRNG, a::AbstractArray, wv, dest::Array{Int8, 1}, site::Int)
-    1 == firstindex(wv) ||
-        throw(ArgumentError("non 1-based arrays are not supported"))
+function loc_sample!(rng::AbstractRNG, wv, dest::Array{Ti, 1}, site::Int) where {Ti<:Integer}
     t = rand(rng) * sum(wv)
     n = length(wv)
-    i = 1
+    i = one(Ti)
     cw = wv[1]
     while cw < t && i < n
         i += 1
@@ -31,8 +29,8 @@ function loc_sample!(rng::AbstractRNG, a::AbstractArray, wv, dest::Array{Int8, 1
 end
 
 
-function loc_softmax!(out::AbstractArray{T}, x::AbstractArray, max_) where {T}
-    max_ = maximum(x)
+function loc_softmax!(out::AbstractArray{T}, x::AbstractArray{T}) where {T}
+    max_ = T(maximum(x))
     if all(isfinite, max_)
         @fastmath out .= exp.(x .- max_)
     else
@@ -43,7 +41,7 @@ function loc_softmax!(out::AbstractArray{T}, x::AbstractArray, max_) where {T}
     out ./= sum(out)#tmp
 end
 
-loc_softmax!(x::AbstractArray, max_) = loc_softmax!(x, x, max_)
+loc_softmax!(x::AbstractArray) = loc_softmax!(x, x)
 
 
 compute_freq(Z::Matrix) = compute_weighted_frequencies(Matrix{Int8}(Z), fill(1/size(Z,2), size(Z,2)), 22)
@@ -74,8 +72,7 @@ function get_energy(seq::Array{<:Integer,1}, K::Array{T,3}, V::Array{T,3}, h::Ar
 end
 
 
-function conn_corr(f1::Array{T, 1}, f2::Array{T, 2}) where {T}
-    L = Int(size(f1,1) /21)
+function conn_corr(f1::Array{T, 1}, f2::Array{T, 2}, L::Int) where {T}
     fone = reshape(f1, (21, L))
     ftwo = reshape(f2, (21, L, 21, L))
     @tullio f11[i,a,j,b] := fone[a,i] * fone[b,j]
@@ -129,10 +126,10 @@ function Delta_energy(J::Array{T,4}, h::Array{T, 2},
     return E
 end
 
-function random_gens(num_generators::Int)
+function random_gens(num_generators::Int) 
     rng_array = []
     for seed in 1:num_generators
-        push!(rng_array, Random.MersenneTwister(seed))
+        push!(rng_array, Random.Xoshiro(seed))
     end
     return rng_array
 end
