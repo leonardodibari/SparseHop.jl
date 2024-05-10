@@ -3,7 +3,7 @@ function parallel_MCMC(V::Array{T,3};
         msa_file = "../DataAttentionDCA/data/PF00014/PF00014_mgap6.fasta.gz", 
         structfile = "../DataAttentionDCA/data/PF00014/PF00014_struct.dat", 
         N_chains = 1000, N_iter::Int = 100, grad_iter::Int = 1, sweeps::Int = 5, learn_r = 0.05, 
-        each_step = 10, q = 21, pc = 0.1, n_edges = 30, reg = 0.01, avoid_upd = false, verbose = false, opt_k = true, grad_upd = true) where {T}
+        each_step = 10, q = 21, pc = 0.1, n_edges = 30, reg = 0.01, avoid_upd = false, verbose = false, opt_k = true, grad_upd = true, startk = 0.0, acc = 0.05) where {T}
     
     TT = eltype(V)
     H = size(V,3)
@@ -12,11 +12,13 @@ function parallel_MCMC(V::Array{T,3};
     W = compute_weights(D.msa, 0.2)[1]
     _w = TT.(W ./ sum(W))
     
+    reg = TT(reg)
+    
     L = size(D.msa,1)
      
-    dL = zeros(L,L,H)
-    k = zeros(L,L,H)
-    y_k = zeros(L,L,H)
+    dL = TT.(zeros(L,L,H))
+    k = TT.(zeros(L,L,H))
+    y_k = TT.(zeros(L,L,H))
     
     rng = random_gens(N_chains)
     chains = [Chain(Int8.(rand(1:21, L)), q, rng[n]) for n in 1:N_chains] #initialize random
@@ -56,8 +58,11 @@ function parallel_MCMC(V::Array{T,3};
     f1rs = reshape(f1, (q, L))
     f2rs = reshape(f2, (q, L, q, L))
     f2rspc = pseudocount2(f2rs, TT, pc, q)
+    
     mheads = TT.(zeros(L,L,size(V,3)))
     moh!(mheads, f2rs, V, L, H, q)
+    
+        
     mheadspc = TT.(zeros(L,L,size(V,3)))
     moh!(mheadspc, f2rspc, V, L, H, q)
     
@@ -81,11 +86,24 @@ function parallel_MCMC(V::Array{T,3};
                 for j in 1:L 
                     if j != i 
                         @tasks for head in 1:H
-                            bisection!(k, y_k, dL, str[head], D.mheadspc[i,j,head], f2rspc, V, i, j, head, reg, q)
+                            bisection!(k, y_k, str[head], D.mheadspc[i,j,head], f2rspc, V, i, j, head, reg, q)  
                         end
                     end 
                 end 
             end
+            
+            
+            for i in 1:L 
+                for j in 1:L 
+                    if j != i 
+                        @tasks for head in 1:H
+                            dL[i,j,head] = dlog(f2rspc, D.f2rspc, k[i,j,head], V, i, j, head, reg, q)
+                        end
+                    end 
+                end 
+            end
+            
+            
             #close("all"); scatter(k[:],y_k[:], label ="k vs y_k $(iter)"); plt.legend(); savefig("../$(iter)Kvsy_Kreg$(reg).png");
             #close("all"); scatter(k[:],dL[:], label ="k vs dL $(iter)"); plt.legend(); savefig("../$(iter)KvsdLreg$(reg).png");
             #println("max numerical_error : $(maximum(abs.(y_k)))")
@@ -102,7 +120,7 @@ function parallel_MCMC(V::Array{T,3};
                     K[m,n,nu] = k[m,n,nu] 
                     K[n,m,nu] = K[m,n,nu]
                 else
-                    K[m,n,nu] = 0.
+                    K[m,n,nu] = startk
                     K[n,m,nu] = K[m,n,nu]
                 end
                 add_edge!(graf[nu], m, n)
@@ -141,7 +159,7 @@ function parallel_MCMC(V::Array{T,3};
                                 #println((i, j, head))
                                 push!(res, K[i, j, head]) 
                                 #print("Grad_it : $(it) K : $(K[i,j,head]) ")
-                                K[i, j, head] += 0.01
+                                K[i, j, head] -= acc
                                 push!(y_res, D.mheads[i,j,head] - mheads[i,j,head])
                                 #println("Grad : $(D.mheads[i,j,head] - mheads[i,j,head]) ")                         
                             end
@@ -158,7 +176,7 @@ function parallel_MCMC(V::Array{T,3};
     end
     
     return (K = K, h = h, g = graf, Z = msa, Zf = D.msa, C = chains, 
-        f1 = f1rs, Df1 = D.f1rs, f2 = f2rspc, Df2 = D.f2rspc, cost = mheadspc, res = res, y_res = y_res)
+        f1 = f1rs, Df1 = D.f1rs, f2 = f2rspc, Df2 = D.f2rspc, cost = D.mheadspc, res = res, y_res = y_res)
 end
 
 

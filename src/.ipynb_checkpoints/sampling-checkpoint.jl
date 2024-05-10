@@ -59,7 +59,8 @@ end
 
 
 
-function update_sample!(msa::Array{<:Integer,2},
+
+function update_sample!(msa::Array{Int8,2},
     f1::Array{T,1},
     f2::Array{T,2},
     f1rs::Array{T,2},
@@ -81,8 +82,7 @@ function update_sample!(msa::Array{<:Integer,2},
     f2rs .= reshape(f2, (q, L, q, L))
     pseudocount2!(f2rspc, f2rs, TT, pc, q)
     moh!(mheads, f2rs, V, L, H, q)
-    moh!(mheadspc, f2rspc, V, L, H, q)
-    
+    moh!(mheadspc, f2rspc, V, L, H, q)    
 end
     
 

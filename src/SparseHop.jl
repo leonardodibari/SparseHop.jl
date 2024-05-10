@@ -28,7 +28,7 @@ include("dca_score.jl")
 include("num_sol.jl")
 
 
-export Chain, parallel_MCMC, parallel_MCMC_ns, folders, seq_paths_dict, structs_dict, quickread, random_gens, compute_freq, compute_freq!, get_J, get_J!, gibbs_sampling!, dlog
+export Chain, parallel_MCMC, parallel_MCMC_ns, folders, seq_paths_dict, structs_dict, quickread, random_gens, compute_freq, compute_freq!, get_J, get_J!, gibbs_sampling!, dlog, single_kmoh, kmoh!
 export dlog!, bisection!, bisection2!, zero_eq!, NumSolVar
 
 
