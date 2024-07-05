@@ -22,7 +22,7 @@ function loc_sample!(rng::AbstractRNG, wv, dest::Array{Ti, 1}, site::Int) where 
     i = one(Ti)
     cw = wv[1]
     while cw < t && i < n
-        i += 1
+        i += one(Ti)
         @inbounds cw += wv[i]
     end
     dest[site] = i
@@ -31,7 +31,7 @@ end
 
 function loc_softmax!(out::AbstractArray{T}, x::AbstractArray{T}) where {T}
     max_ = T(maximum(x))
-    if all(isfinite, max_)
+    if isfinite(max_)
         @fastmath out .= exp.(x .- max_)
     else
         _zero, _one, _inf = T(0), T(1), T(Inf)
