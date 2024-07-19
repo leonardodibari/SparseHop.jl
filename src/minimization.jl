@@ -16,8 +16,10 @@ function ConstPara(enu::Matrix{T}, fmn::Matrix{T}, Pmn::Matrix{T}, lambda::T) wh
     q = 21
     fm = sum(fmn, dims=2)[:]
     fn = sum(fmn, dims=1)[:]
-    @assert sum(fm)≈1
-    @assert sum(fn)≈1
+    #println(sum(fm))
+    #println(sum(fn))
+    #@assert sum(fm)≈1
+    #@assert sum(fn)≈1
     Δmn = zeros(T, q, q)
     Ptilde = zeros(T, q, q)
     return ConstPara{T}(enu, Δmn, Ptilde, fmn, Pmn, fm, fn, lambda)

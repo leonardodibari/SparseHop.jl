@@ -12,6 +12,7 @@ using Optim
 using ComponentArrays
 using Zygote, JLD2
 using LineSearches
+using NLopt
 
 import LogExpFunctions: logsumexp
 import Tullio: @tullio
@@ -32,13 +33,16 @@ include("utils.jl")
 include("dca_score.jl")
 include("num_sol.jl")
 include("minimization.jl")
+include("nlopt_minim.jl")
+
+include("learn_V.jl")
 
 
 export Chain, Data, ModelData, NumSolVar 
 export folders, seq_paths_dict, structs_dict 
 export get_dlog!, activate_edges!, zero_eq, dlog
 export run_gibbs_sampling!, update_ModelData!, grad_update!
-export parallel_MCMC, runSparseHop, new_runSparseHop
+export parallel_MCMC, runSparseHop, new_runSparseHop, new_runSparseHop_onV
 
 
 end

@@ -112,21 +112,6 @@ end
 
 
 
-function print_info(D, M, h::Array{T,2}, J::Array{T,4}, K::Array{T,3}, V::Array{T,3}, graf, reg::T, iter::Int, q::Int, L::Int, H::Int, structfile::String, file, savefile) where {T}
-    get_J!(J, K, V)
-    s = score(K,V)
-    PPV = compute_PPV(s,structfile)
-    n_act = 2*sum([ne(graf[head]) for head in 1:H])
-    potts_par = q*q*L*(L-1)/2 + L*q
-    println()
-    @info "N_Iter $(iter) One $(round(cor(M.f1[:],D.f1[:]), digits = 3)) Conn $(round(cor(triu(M.f2 - M.f1*M.f1', 21)[:], triu(D.f2 - D.f1*D.f1', 21)[:]), digits = 3)) Conn head $(round(cor(D.mheads[:] .- D.mheads_disc[:], M.mheads[:] .- M.mheads_disc[:]), digits = 3)) PPV@L $(round(PPV[L], digits = 3)) PPV@2L $(round(PPV[2*L], digits = 3)) #edges $(sum([ne(graf[head]) for head in 1:H])) / $(Int(L*(L-1)*H/2)) %2PLM = $(round((L*q+ q*H +n_act)/potts_par, digits = 3))" 
-    savefile !== nothing && println(file,"")
-    savefile !== nothing && println(file, "N_Iter $(iter) One $(round(cor(M.f1[:],D.f1[:]), digits = 3)) Conn $(round(cor(triu(M.f2 - M.f1*M.f1', 21)[:], triu(D.f2 - D.f1*D.f1', 21)[:]), digits = 3)) Conn head $(round(cor(D.mheads[:] .- D.mheads_disc[:], M.mheads[:] .- M.mheads_disc[:]), digits = 3)) PPV@L $(round(PPV[L], digits = 3)) PPV@2L $(round(PPV[2*L], digits = 3)) #edges $(sum([ne(graf[head]) for head in 1:H])) / $(Int(L*(L-1)*H/2)) %2PLM = $(round((L*q+ q*H +n_act)/potts_par, digits = 3))")
-    if iter > 1 && sum(K .!= 0.)>0
-        println("Iter $(iter) norm_g $(round(sqrt(sum(abs2, D.mheads[K .!= 0.] - M.mheads[K .!= 0,] .- 2 .* reg  .* K[K .!= 0.] ))/n_act, digits = 7)) max_g $(round(maximum(abs.(D.mheads[K .!= 0.] - D.mheads[K .!= 0.] .- 2 .* reg  .* K[K .!= 0.])), digits = 7))") 
-    end
-end
-
 
 function runSparseHop(m, V::Array{T,3}; 
         msa_file = "../DataAttentionDCA/data/PF00014/PF00014_mgap6.fasta.gz", 

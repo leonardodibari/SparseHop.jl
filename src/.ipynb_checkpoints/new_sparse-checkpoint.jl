@@ -3,7 +3,7 @@ function new_runSparseHop(V::Array{T,3};
         msa_file = "../DataAttentionDCA/data/PF00014/PF00014_mgap6.fasta.gz", 
         structfile = "../DataAttentionDCA/data/PF00014/PF00014_struct.dat", 
         N_chains = 5000, N_iter::Int = 100, grad_iter::Int = 1, sweeps::Int = 5, learn_r = 1e-2, 
-        each_step = 10, q = 21, pc = 1e-2, n_edges = 30, reg = 1e-2, rand_init = true, avoid_upd = false, verbose = false, opt_k = true, grad_upd = true, savefile::Union{String, Nothing} = nothing, savepars = true) where {T}
+        each_step = 10, q = 21, pc = 1e-2, n_edges = 30, reg = 1e-2, rand_init = true, avoid_upd = false, verbose = false, opt_k = true, grad_upd = true, savefile::Union{String, Nothing} = nothing, savepars = false) where {T}
     
     #global variables
     TT = eltype(V); pc = TT(pc); reg = TT(reg); learn_r = TT(learn_r); 
@@ -14,11 +14,7 @@ function new_runSparseHop(V::Array{T,3};
     #containers
     dL = TT.(zeros(L,L,H)); k = TT.(zeros(L,L,H)); y_k = TT.(zeros(L,L,H)); history = Int.(zeros(L,L,H)); 
     order_list = [];
-    new_type =Optim.MultivariateOptimizationResults{Optim.LBFGS{Nothing,LineSearches.InitialStatic{Float64},LineSearches.HagerZhang{Float64, Base.RefValue{Bool}},Optim.var"#19#21"},ComponentArrays.ComponentArray{T,1,Array{T,1},Tuple{ComponentArrays.Axis{(hm = 1:21, hn = 22:42, Kmn = 43)}}},T,T,Array{Optim.OptimizationState{Float32,Optim.LBFGS{Nothing,LineSearches.InitialStatic{Float64},LineSearches.HagerZhang{Float64, Base.RefValue{Bool}},Optim.var"#19#21"}},1},Bool,NamedTuple{(:f_limit_reached, :g_limit_reached, :h_limit_reached, :time_limit, :callback, :f_increased),Tuple{Bool,Bool,Bool,Bool,Bool,Bool}}}
-    
-    #=Optim.MultivariateOptimizationResults{Optim.LBFGS{Nothing,LineSearches.InitialStatic{Float64},LineSearches.BackTracking{Float64, Int64},Optim.var"#20#22"},ComponentArrays.ComponentArray{T,1,Array{T,1},Tuple{ComponentArrays.Axis{(hm = 1:21, hn = 22:42, Kmn = 43)}}},T,T,Array{Optim.OptimizationState{T,Optim.LBFGS{Nothing,LineSearches.InitialStatic{Float64},LineSearches.BackTracking{Float64, Int64},Optim.var"#20#22"}},1},Bool,NamedTuple{(:f_limit_reached, :g_limit_reached, :h_limit_reached, :time_limit, :callback, :f_increased),Tuple{Bool,Bool,Bool,Bool,Bool,Bool}}}=#
-    
-    
+    new_type =Optim.MultivariateOptimizationResults{Optim.LBFGS{Nothing,LineSearches.InitialStatic{Float64},LineSearches.HagerZhang{Float64, Base.RefValue{Bool}},Optim.var"#19#21"},ComponentArrays.ComponentArray{T,1,Array{T,1},Tuple{ComponentArrays.Axis{(hm = 1:21, hn = 22:42, Kmn = 43)}}},T,T,Array{Optim.OptimizationState{T,Optim.LBFGS{Nothing,LineSearches.InitialStatic{Float64},LineSearches.HagerZhang{Float64, Base.RefValue{Bool}},Optim.var"#19#21"}},1},Bool,NamedTuple{(:f_limit_reached, :g_limit_reached, :h_limit_reached, :time_limit, :callback, :f_increased),Tuple{Bool,Bool,Bool,Bool,Bool,Bool}}}
     
     minim_res = Array{new_type}(undef, (L,L,H));
     ps = Array{ConstPara}(undef, (L,L,H));
@@ -94,8 +90,12 @@ function new_runSparseHop(V::Array{T,3};
     end
     get_J!(J, K, V)
     savefile !== nothing && close(file)
-    return (K = K, h = h, J = J, graf = graf, full_graf = full_graf, D = D, M = M, chains = chains, history = history, reg = reg, pc = pc, order_list = order_list)
+    return (K = K, h = h, V = V, J = J, graf = graf, full_graf = full_graf, D = D, M = M, chains = chains, history = history, reg = reg, pc = pc, order_list = order_list)
 end
+
+
+
+
 
 function new_grad_update!(h::Array{T,2}, K::Array{T,3}, D, M, graf, learn_r::T, reg::T, H::Int, file, savefile::Union{String, Nothing}, it::Int, history::Array{Int,3}) where {T}
     #gradient descent on fields
@@ -118,14 +118,33 @@ end
                         
 
 
-function new_runSparseHop(out, V::Array{T,3}; 
+function print_info(D, M, h::Array{T,2}, J::Array{T,4}, K::Array{T,3}, V::Array{T,3}, graf, reg::T, iter::Int, q::Int, L::Int, H::Int, structfile::String, file, savefile) where {T}
+    get_J!(J, K, V)
+    s = score(K,V)
+    PPV = compute_PPV(s,structfile)
+    n_act = 2*sum([ne(graf[head]) for head in 1:H])
+    potts_par = q*q*L*(L-1)/2 + L*q
+    println()
+    @info "N_Iter $(iter) One $(round(cor(M.f1[:],D.f1[:]), digits = 3)) Conn $(round(cor(triu(M.f2 - M.f1*M.f1', 21)[:], triu(D.f2 - D.f1*D.f1', 21)[:]), digits = 3)) Conn head $(round(cor(D.mheads[:] .- D.mheads_disc[:], M.mheads[:] .- M.mheads_disc[:]), digits = 3)) PPV@L $(round(PPV[L], digits = 3)) PPV@2L $(round(PPV[2*L], digits = 3)) #edges $(sum([ne(graf[head]) for head in 1:H])) / $(Int(L*(L-1)*H/2)) %2PLM = $(round((L*q+ q*H +n_act)/potts_par, digits = 3))" 
+    savefile !== nothing && println(file,"")
+    savefile !== nothing && println(file, "N_Iter $(iter) One $(round(cor(M.f1[:],D.f1[:]), digits = 3)) Conn $(round(cor(triu(M.f2 - M.f1*M.f1', 21)[:], triu(D.f2 - D.f1*D.f1', 21)[:]), digits = 3)) Conn head $(round(cor(D.mheads[:] .- D.mheads_disc[:], M.mheads[:] .- M.mheads_disc[:]), digits = 3)) PPV@L $(round(PPV[L], digits = 3)) PPV@2L $(round(PPV[2*L], digits = 3)) #edges $(sum([ne(graf[head]) for head in 1:H])) / $(Int(L*(L-1)*H/2)) %2PLM = $(round((L*q+ q*H +n_act)/potts_par, digits = 3))")
+    if iter > 1 && sum(K .!= 0.)>0
+        println("Iter $(iter) norm_g $(round(sqrt(sum(abs2, D.mheads[K .!= 0.] - M.mheads[K .!= 0,] .- 2 .* reg  .* K[K .!= 0.] ))/n_act, digits = 7)) max_g $(round(maximum(abs.(D.mheads[K .!= 0.] - D.mheads[K .!= 0.] .- 2 .* reg  .* K[K .!= 0.])), digits = 7))") 
+    end
+end
+
+
+
+
+
+function new_runSparseHop(out; 
         msa_file = "../DataAttentionDCA/data/PF00014/PF00014_mgap6.fasta.gz", 
         structfile = "../DataAttentionDCA/data/PF00014/PF00014_struct.dat", 
         N_iter::Int = 100, grad_iter::Int = 1, sweeps::Int = 5, learn_r = 1e-2, 
-        each_step = 10, q = 21, n_edges = 30, avoid_upd = false, verbose = false, opt_k = true, grad_upd = true, savefile::Union{String, Nothing} = nothing, savepars = true) where {T}
+        each_step = 10, q = 21, n_edges = 30, avoid_upd = false, verbose = false, opt_k = true, grad_upd = true, savefile::Union{String, Nothing} = nothing, savepars = false) 
     
     #global variables
-    K = deepcopy(out.K); h = deepcopy(out.h); J = deepcopy(out.J); graf = deepcopy(out.graf); full_graf = deepcopy(out.full_graf); D = deepcopy(out.D); M = deepcopy(out.M); chains = deepcopy(out.chains); reg = deepcopy(out.reg); pc = deepcopy(out.pc)
+    K = deepcopy(out.K); h = deepcopy(out.h); V = deepcopy(out.V); J = deepcopy(out.J); graf = deepcopy(out.graf); full_graf = deepcopy(out.full_graf); D = deepcopy(out.D); M = deepcopy(out.M); chains = deepcopy(out.chains); reg = deepcopy(out.reg); pc = deepcopy(out.pc)
     
     TT = eltype(V); learn_r = TT(learn_r); 
     H = size(V,3)
@@ -135,9 +154,7 @@ function new_runSparseHop(out, V::Array{T,3};
     #containers
     dL = TT.(zeros(L,L,H)); k = TT.(zeros(L,L,H)); y_k = TT.(zeros(L,L,H)); history = Int.(zeros(L,L,H)); 
     order_list = [];
-    new_type =Optim.MultivariateOptimizationResults{Optim.LBFGS{Nothing,LineSearches.InitialStatic{Float64},LineSearches.HagerZhang{Float64, Base.RefValue{Bool}},Optim.var"#19#21"},ComponentArrays.ComponentArray{T,1,Array{T,1},Tuple{ComponentArrays.Axis{(hm = 1:21, hn = 22:42, Kmn = 43)}}},T,T,Array{Optim.OptimizationState{Float32,Optim.LBFGS{Nothing,LineSearches.InitialStatic{Float64},LineSearches.HagerZhang{Float64, Base.RefValue{Bool}},Optim.var"#19#21"}},1},Bool,NamedTuple{(:f_limit_reached, :g_limit_reached, :h_limit_reached, :time_limit, :callback, :f_increased),Tuple{Bool,Bool,Bool,Bool,Bool,Bool}}}
-    
-    #=Optim.MultivariateOptimizationResults{Optim.LBFGS{Nothing,LineSearches.InitialStatic{Float64},LineSearches.BackTracking{Float64, Int64},Optim.var"#20#22"},ComponentArrays.ComponentArray{T,1,Array{T,1},Tuple{ComponentArrays.Axis{(hm = 1:21, hn = 22:42, Kmn = 43)}}},T,T,Array{Optim.OptimizationState{T,Optim.LBFGS{Nothing,LineSearches.InitialStatic{Float64},LineSearches.BackTracking{Float64, Int64},Optim.var"#20#22"}},1},Bool,NamedTuple{(:f_limit_reached, :g_limit_reached, :h_limit_reached, :time_limit, :callback, :f_increased),Tuple{Bool,Bool,Bool,Bool,Bool,Bool}}}=#
+    new_type =Optim.MultivariateOptimizationResults{Optim.LBFGS{Nothing,LineSearches.InitialStatic{Float64},LineSearches.HagerZhang{Float64, Base.RefValue{Bool}},Optim.var"#19#21"},ComponentArrays.ComponentArray{TT,1,Array{TT,1},Tuple{ComponentArrays.Axis{(hm = 1:21, hn = 22:42, Kmn = 43)}}},TT,TT,Array{Optim.OptimizationState{TT,Optim.LBFGS{Nothing,LineSearches.InitialStatic{Float64},LineSearches.HagerZhang{Float64, Base.RefValue{Bool}},Optim.var"#19#21"}},1},Bool,NamedTuple{(:f_limit_reached, :g_limit_reached, :h_limit_reached, :time_limit, :callback, :f_increased),Tuple{Bool,Bool,Bool,Bool,Bool,Bool}}}
     
     minim_res = Array{new_type}(undef, (L,L,H));
     ps = Array{ConstPara}(undef, (L,L,H));
@@ -151,14 +168,14 @@ function new_runSparseHop(out, V::Array{T,3};
         for i in 1:L
             for j in (i+1):L
                 for head in 1:H
-                    ps[i,j,head] = ConstPara(V[:, :, head], D.f2rs[:, i, :, j], M.f2rs[:, i, :, j], T(2*reg))
+                    ps[i,j,head] = ConstPara(V[:, :, head], D.f2rs[:, i, :, j], M.f2rs[:, i, :, j], TT(2*reg))
                 end
             end
         end
     
         #from time to time print info on learning
         if iter % each_step == 0
-            print_info(D, M, h, J, K, V, graf, reg, iter, q, L, H, structfile, file, savefile) 
+            print_info(D, M, h, J, K, V, graf, reg, iter, q, L, H, structfile, file, savefile)
         end       
         
         #compute dlog and activate edges accordingly 
@@ -180,8 +197,12 @@ function new_runSparseHop(out, V::Array{T,3};
                 grad_update!(h, K, D, M, graf, learn_r, reg, H, file, savefile, it, history)                
             end
         end 
+        if savepars == true 
+            out = (K = K, h = h, J = J, graf = graf, full_graf = full_graf, D = D, M = M, chains = chains, reg = reg, pc = pc)
+            @save pars_file out
+        end
     end
     get_J!(J, K, V)
     savefile !== nothing && close(file)
-    return (K = K, h = h, J = J, graf = graf, full_graf = full_graf, D = D, M = M, chains = chains, history = history, reg = reg, pc = pc, order_list = order_list)
+    return (K = K, h = h, V = V, J = J, graf = graf, full_graf = full_graf, D = D, M = M, chains = chains, history = history, reg = reg, pc = pc, order_list = order_list)
 end
