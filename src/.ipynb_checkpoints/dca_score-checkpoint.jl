@@ -8,6 +8,14 @@ function compute_residue_pair_dist(filedist::String)
 
 end
 
+function filter_contacts!(d; min_separation = 6, cutoff = 8.0)
+    for (key,value) in d
+        if key[2]-key[1]<=min_separation || value > cutoff || value == 0 
+            delete!(d,key)
+        end
+    end
+end
+    
 
 function compute_referencescore(score,dist::Dict; mindist::Int=6, cutoff::Number=8.0)
     nc2 = length(score)
@@ -135,3 +143,53 @@ function compute_actualPPV(filestruct;cutoff=8.0,min_separation=6)
     return vcat(x,scra) 
     
 end
+
+
+
+function top_n_indices(A::Array{Float64, 3}, n::Int)
+    # Ensure the input is a 3D array
+    @assert ndims(A) == 3 "Input must be a 3D array"
+
+    m, p, q = size(A)
+
+    # Flatten the 3D array to 1D
+    flat_array = vec(A)
+
+    # Find the indices of the top n elements in the flattened array
+    top_flat_indices = partialsortperm(flat_array, 1:n, rev=true)
+
+    # Convert flat indices back to 3D indices
+    top_indices_3D = []
+    for idx in top_flat_indices
+        z = div(idx - 1, m * p) + 1  # Depth index
+        remaining = mod(idx - 1, m * p)
+        y = div(remaining, m) + 1  # Row index
+        x = mod(remaining, m) + 1  # Column index
+        push!(top_indices_3D, (x, y, z))
+    end
+
+    return top_indices_3D
+end
+
+
+function epistatic_score(J::Array{Float64,4}, seq::Array{Int8,1})
+    q, L, q, L = size(J) 
+    res = zeros(L,L)
+    
+    for i in 1:L
+        for j in i+1:L
+            for a in 1:21
+                for b in 1:21
+                    if a !== seq[i] || b !== seq[j]
+                        res[i,j] += J[a,i,b,j] - J[a,i,seq[j],j] - J[b,i,seq[i],j] + J[seq[i],i,seq[j],j]
+                    end
+                end
+            end
+            res[j,i] = res[i,j]
+        end
+    end
+    
+    return res
+end
+            
+                    

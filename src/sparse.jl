@@ -76,41 +76,6 @@ function runSparseHop(V::Array{T,3};
     return (K = K, h = h, J = J, str = str, graf = graf, full_graf = full_graf, D = D, M = M, chains = chains, history = history, reg = reg, pc = pc, order_list = order_list)
 end
 
-function grad_update!(h::Array{T,2}, K::Array{T,3}, D, M, graf, learn_r::T, reg::T, H::Int, file, savefile::Union{String, Nothing}, it::Int, history::Array{Int,3}) where {T}
-    #gradient descent on fields
-    h .+= learn_r .* (D.f1rs .- M.f1rs)
-    #gradient descent on couplings only for activated edges
-    for head in 1:H
-        if ne(graf[head]) !== 0
-            for i in findall(.!isempty.(graf[head].fadjlist))
-                for j in neighbors(graf[head], i)
-                    if (j>i && it%10 == 0) || (j>i && it == 1)
-                        savefile !== nothing && println(file, "Edge $i $j $head hist $(history[i,j,head]) K $(K[i,j,head]) Grad $(D.mheads[i,j,head] - M.mheads[i,j,head] - 2 * reg *K[i, j, head])")
-                    end
-                    K[i, j, head] += learn_r * (D.mheads[i,j,head] - M.mheads[i,j,head] - 2 * reg *K[i, j, head])
-                end
-            end
-        end
-    end 
-end
-                        
-                        
-function grad_update!(h::Array{T,2}, K::Array{T,3}, D, M, graf, learn_r::T, reg::T, H::Int) where {T}
-    #gradient descent on fields
-    h .+= learn_r .* (D.f1rs .- M.f1rs)
-    #gradient descent on couplings only for activated edges
-    for head in 1:H
-        if ne(graf[head]) !== 0
-            for i in findall(.!isempty.(graf[head].fadjlist))
-                for j in neighbors(graf[head], i)
-                    K[i, j, head] += learn_r * (D.mheads[i,j,head] - M.mheads[i,j,head] - 2 * reg *K[i, j, head])
-                end
-            end
-        end
-    end 
-end
-
-
 
 
 function runSparseHop(m, V::Array{T,3}; 

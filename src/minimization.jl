@@ -166,7 +166,7 @@ function new_activate_edges!(k::Array{T,3}, K::Array{T,3}, h::Array{T,2}, minim_
         m, n, nu = Tuple(argmax(dL))
         history[m,n,nu] = iter
         if verbose == true
-            println(" Suggested K : $(k[m,n,nu]), terms $(argmax(dL)), dL : $(maximum(dL))")
+            println(" Suggested K : $(k[m,n,nu]), terms $(argmax(dL)), dL : $(maximum(dL)) Reg $(10^-4*k[m,n,nu]*k[m,n,nu]/maximum(dL))")
         end
         if opt_k == true
             K[m,n,nu] += k[m,n,nu]
@@ -184,51 +184,5 @@ function new_activate_edges!(k::Array{T,3}, K::Array{T,3}, h::Array{T,2}, minim_
 end
     
        
-# from here on is the simple version of the optimization using Zygote (much
-# slower). We get the same results as the previous version.
-
-function f(x, p::ConstPara{T}) where {T<:AbstractFloat}
-    ll1 = -p.lambda * sum(abs2, x) / 2
-    @inbounds @simd for b in eachindex(x.hn)
-        for a in eachindex(x.hm)
-            ll1 += (x.hm[a] + x.hn[b] + x.Kmn * p.enu[a, b]) * p.fmn[a, b]
-        end
-    end
-    nrm = T(0)
-    @inbounds @simd for b in eachindex(x.hn)
-        for a in eachindex(x.hm)
-            nrm += exp(x.hm[a] + x.hn[b] + x.Kmn * p.enu[a, b]) * p.Pmn[a, b]
-        end
-    end
-    #println("likelihood = $(ll1 - log(nrm)) Km = $(x.Kmn)")
-    return (ll1 - log(nrm))
-end
-
-function g!(G, x, p)
-    G .= Zygote.gradient(x -> f(x, p), x)[1]
-end
-
-function optimize_simple_value(p::ConstPara{T};
-    x0=ComponentArray{T}(hm=randn(T, 21), hn=randn(T, 21), Kmn=randn(T)),
-    show_trace=true,
-    iterations=1000,
-    tol=1e-6,
-    optimizer=LBFGS(linesearch = LineSearches.BackTracking())) where {T<:AbstractFloat}
-    # initial_Kmn = x0.Kmn
-
-    wrapf = x -> f(x, p)
-    wrapg! = (G,x) -> g!(G,x,p)
-
-    res = Optim.maximize(wrapf, wrapg!, x0, optimizer, Optim.Options(show_trace=show_trace, iterations=iterations, f_tol=tol))
-    return res
-    # return res, x0
-end
-
-
-
-
-
-
-
 
 
